@@ -28,16 +28,17 @@ class ProgressReporter:
     def report_progress(self, elapsed_time, frame_count):
         if progress_interval > 0 and elapsed_time >= self.last_report_time + self.progress_interval:
             processed_time = time.time() - self.start_time
-            elapsed_time_str = self._time_format(elapsed_time)
-            total_time_str = self._time_format(self.total_duration)
+            percent = elapsed_time / (self.end - self.start) * 100
+            # elapsed_time_str = self._time_format(elapsed_time)
+            # total_time_str = self._time_format(self.total_duration)
             processed_time_str = self._time_format(processed_time)
-            print(f"已处理 {elapsed_time_str}/{total_time_str} 的视频内容，已花费时间：{processed_time_str}，已提取图片数：{frame_count}")
+            print(f"\r已处理 {percent:.2f} %的视频内容，已花费时间：{processed_time_str}，已提取图片数：{frame_count}", end = "")
             self.last_report_time = elapsed_time
     
     def report_result(self, frame_count):
         total_time = time.time() - self.start_time
         total_time_str = self._time_format(total_time)
-        print(f"处理总用时：{total_time_str}，处理片段{self._time_format(self.start)}--{self._time_format(self.end)}，输出图片数：{frame_count}")
+        print(f"\n处理总用时：{total_time_str}，处理片段{self._time_format(self.start)}--{self._time_format(self.end)}，输出图片数：{frame_count}")
 
     def _time_format(self, seconds):
         hours = int(seconds // 3600)
@@ -79,7 +80,7 @@ def extract_frames(input_file, output_folder, start = 0, end = 0, frame_skip = 5
             break
 
         # 进度汇报
-        elapsed_time = cap.get(cv2.CAP_PROP_POS_FRAMES) / fps
+        elapsed_time = cap.get(cv2.CAP_PROP_POS_FRAMES) / fps  # 当前处理帧对应原视频的时间
         progress_reporter.report_progress(elapsed_time, frame_count)
 
         # 将当前帧转换为图像对象
@@ -161,3 +162,4 @@ if __name__ == "__main__":
         os.makedirs(output_folder)
         
     extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval * 60, threshold)  # 调用 extract_frames 函数处理视频
+    input("按下任意键退出")

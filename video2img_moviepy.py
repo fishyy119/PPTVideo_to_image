@@ -20,24 +20,25 @@ class ProgressReporter:
     def __init__(self, total_duration, fps, progress_interval, start, end):
         self.total_duration = total_duration  # 记录视频总时长
         self.progress_interval = progress_interval  # 记录提示间隔
-        self.start = start // fps  # 以秒为单位的起止时间
-        self.end = end // fps
+        self.start = round(start / fps)  # 以秒为单位的起止时间
+        self.end = round(end / fps)
         self.last_report_time = self.start  # 记录上次报告对应的视频时间
         self.start_time = time.time()
 
     def report_progress(self, elapsed_time, frame_count):
         if progress_interval > 0 and elapsed_time >= self.last_report_time + self.progress_interval:
             processed_time = time.time() - self.start_time
-            elapsed_time_str = self._time_format(elapsed_time)
-            total_time_str = self._time_format(self.total_duration)
+            percent = elapsed_time / (self.end - self.start) * 100
+            # elapsed_time_str = self._time_format(elapsed_time)
+            # total_time_str = self._time_format(self.total_duration)
             processed_time_str = self._time_format(processed_time)
-            print(f"已处理 {elapsed_time_str}/{total_time_str} 的视频内容，已花费时间：{processed_time_str}，已提取图片数：{frame_count}")
+            print(f"\r已处理 {percent:.2f} %的视频内容，已花费时间：{processed_time_str}，已提取图片数：{frame_count}", end = "")
             self.last_report_time = elapsed_time
     
     def report_result(self, frame_count):
         total_time = time.time() - self.start_time
         total_time_str = self._time_format(total_time)
-        print(f"处理总用时：{total_time_str}，处理片段{self._time_format(self.start)}--{self._time_format(self.end)}，输出图片数：{frame_count}")
+        print(f"\n处理总用时：{total_time_str}，处理片段{self._time_format(self.start)}--{self._time_format(self.end)}，输出图片数：{frame_count}")
 
     def _time_format(self, seconds):
         hours = int(seconds // 3600)
@@ -139,3 +140,4 @@ if __name__ == "__main__":
         os.makedirs(output_folder)
         
     extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval * 60, threshold)  # 调用 extract_frames 函数处理视频
+    input("按下任意键退出")
