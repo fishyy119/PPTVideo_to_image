@@ -140,4 +140,4 @@ if __name__ == "__main__":
         os.makedirs(output_folder)
         
     extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval * 60, threshold)  # 调用 extract_frames 函数处理视频
-    input("按下任意键退出")
+    input("按下回车键退出")
