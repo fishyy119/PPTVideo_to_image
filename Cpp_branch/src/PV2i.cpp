@@ -5,6 +5,7 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include <set>
 #include <cmath>
 
 using namespace std;
@@ -44,7 +45,7 @@ public:
         
         start_time = chrono::high_resolution_clock::now();
         // 计算所有需要报告的时间点
-        for (double t = start / fps; t <= total_duration; t += progress_interval * 60) {
+        for (double t = start / fps + 1; t <= total_duration; t += progress_interval * 60) {
             report_times.push_back(t);
         }
     }
@@ -60,6 +61,7 @@ public:
             auto now = chrono::high_resolution_clock::now();
             chrono::duration<double> processed_time = now - start_time;
             double percent = (elapsed_time * fps - start) / (end - start) * 100;
+            cout << "\r" << std::string(80, ' '); // 清除当前行
             cout << "\r已处理 " << percent << " % 的视频内容，已花费时间：" 
                 << time_format(processed_time.count()) << "，已提取图片数：" << frame_count << flush;
             report_times.erase(report_times.begin()); // 移除已报告的时间点
@@ -157,6 +159,7 @@ void extract_frames(const string& input_file, const string& output_folder, int s
     // 报告用，可能要改
     ProgressReporter progress_reporter(total_duration, fps, progress_interval, start_frame, end_frame);
     vector<size_t> hash_list; // 存储哈希值
+    // set<size_t> hash_set; // 存储哈希值
     int frame_count = 0; // 已经提取出来的图像数（有效的）
     int frame_index = start_frame;
 
@@ -165,11 +168,18 @@ void extract_frames(const string& input_file, const string& output_folder, int s
         cap.set(CAP_PROP_POS_FRAMES, frame_index);
         if (!cap.read(frame)) break;
 
-        double elapsed_time = cap.get(CAP_PROP_POS_FRAMES) / double(fps); // 当前已处理到的视频时间（s）
-        progress_reporter.report_progress(elapsed_time, frame_count);
-
         size_t img_hash = calculate_pHash(frame);
+        // TODO: 更好的检测算法
         bool similar = false;
+
+        // // 检查哈希值是否相似
+        // auto it = hash_set.lower_bound(img_hash);
+        // if (it != hash_set.end() && abs((int)(*it ^ img_hash)) < threshold) {
+        //     similar = true; // 找到相似哈希值
+        // } else {
+        //     hash_set.insert(img_hash); // 插入新的哈希值
+        // }
+
 
         // 检查hash_list中的哈希值是否相似
         for (const auto& hash_value : hash_list) {
@@ -181,9 +191,11 @@ void extract_frames(const string& input_file, const string& output_folder, int s
         }
 
         if (!similar) {
+            double elapsed_time = cap.get(CAP_PROP_POS_FRAMES) / double(fps); // 当前已处理到的视频时间（s）
             string frame_path = output_folder + "/frame_" + to_string(int(elapsed_time / 60)) + "min_" + to_string(frame_count) + ".jpg";
             imwrite(frame_path, frame);
             hash_list.push_back(img_hash);
+            progress_reporter.report_progress(elapsed_time, frame_count);
             frame_count++;
         }
 
@@ -195,29 +207,56 @@ void extract_frames(const string& input_file, const string& output_folder, int s
     progress_reporter.report_result(frame_count);
 }
 
+// 获取当前时间并格式化为 "output_MMDD_HHmmss"
+string get_default_output_folder_name() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm now_tm = *std::localtime(&now_c);
 
-int main(void) {
-    string input_file, output_folder;
-    cout << "请输入视频文件路径:"; 
-    getline(cin, input_file);
+    std::ostringstream oss;
+    oss << "output_"
+        << std::setfill('0') << std::setw(2) << now_tm.tm_mon + 1
+        << std::setfill('0') << std::setw(2) << now_tm.tm_mday << "_"
+        << std::setfill('0') << std::setw(2) << now_tm.tm_hour
+        << std::setfill('0') << std::setw(2) << now_tm.tm_min
+        << std::setfill('0') << std::setw(2) << now_tm.tm_sec;
 
-    cout << "请输入输出文件夹路径:"; 
-    getline(cin, output_folder);
+    return oss.str();
+}
 
+/**
+ * @brief 获取用户输入，如果为空则返回指定的默认值。
+ * 
+ * @param prompt 提示信息
+ * @param default_prompt 默认提示值
+ * @param default_value 返回的默认值
+ * @return string 用户输入的字符串或返回的默认值
+ */
+string get_input(const string& prompt, const string& default_prompt, const string& default_value) {
+    cout << prompt << " (默认: " << default_prompt << "): ";
+    string input;
+    getline(cin, input);
+    return input.empty() ? default_value : input; // 如果输入为空，则返回默认值
+}
+
+int main() {
+    string input_file = get_input("请输入视频文件路径", "1.mp4", "1.mp4");
+    string output_folder = get_input("请输入输出文件夹路径", "output_MMDD_HHmmss", get_default_output_folder_name());
     // 如果文件夹不存在，则创建
     if (!fs::exists(output_folder)) {
         fs::create_directories(output_folder);
     }
 
-    int start, end, frame_skip, progress_interval, threshold;
-    cout << "请输入起点(分钟):"; cin >> start;
-    cout << "请输入终点(分钟):"; cin >> end;
-    cout << "请输入跳帧检测值:"; cin >> frame_skip;
-    cout << "请输入进度提示间隔时间(分钟):"; cin >> progress_interval;
-    cout << "请输入相似度比较阈值:"; cin >> threshold;
+    int start = stoi(get_input("请输入起点(分钟)", "开头", "0"));
+    int end = stoi(get_input("请输入终点(分钟)", "结尾", "-1"));
+    int frame_skip = stoi(get_input("请输入跳帧检测值", "30", "30"));
+    int progress_interval = stoi(get_input("请输入进度提示间隔时间(分钟)", "5", "5"));
+    int threshold = stoi(get_input("请输入相似度比较阈值", "4", "4"));
 
+    // TODO: 增加错误变量类型提示
+
+    // 这里调用你的处理函数
     extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval, threshold);
-
     system("PAUSE");
 
     return 0;
