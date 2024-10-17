@@ -6,7 +6,7 @@
             "displayName": "GCC 14.2.0 x86_64-w64-mingw32",
             "description": "使用编译器: x86_64-14.2.0-release-posix-seh-ucrt-rt_v12-rev0",
             "generator": "MinGW Makefiles",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
                 "CMAKE_C_COMPILER": "D:/C/x86_64-14.2.0-release-posix-seh-ucrt-rt_v12-rev0/mingw64/bin/gcc.exe",
