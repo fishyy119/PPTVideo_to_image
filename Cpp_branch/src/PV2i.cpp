@@ -11,7 +11,7 @@
 using namespace std;
 using namespace cv;
 namespace fs = std::filesystem;
-
+// TODO: 自适应跳帧
 
 /**
  * @brief 将给定的秒数格式化为 HH:MM:SS 的字符串格式。
