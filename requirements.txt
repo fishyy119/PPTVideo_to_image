@@ -1,1 +1,4 @@
-# TODO...
+numpy==1.26.4
+opencv-python==4.9.0.80
+moviepy==1.0.3
+imagehash==4.3.1
