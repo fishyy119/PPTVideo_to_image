@@ -1,7 +1,17 @@
 cmake_minimum_required(VERSION 3.5.0)
 project(PV2i VERSION 0.1.0 LANGUAGES C CXX)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -static")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
+set(CMAKE_BUILD_TYPE "Debug")
+# set(CMAKE_BUILD_TYPE "Release")
+MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
+
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O3")
+
+
+set(CMAKE_BINARY_DIR "${CMAKE_SOURCE_DIR}/build")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/release")
 
 set(OpenCV_DIR ./lib/opencv)
 find_package(OpenCV REQUIRED)
@@ -10,11 +20,11 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 # PV2i
 add_executable(PV2i src/PV2i.cpp)
 target_link_libraries(PV2i ${OpenCV_LIBS})
-target_link_libraries(PV2i -static-libgcc -static-libstdc++)
+target_link_libraries(PV2i)
 
 # test_ORB
 add_executable(TestORB test/test_ORB.cpp)
 target_link_libraries(TestORB ${OpenCV_LIBS})
-target_link_libraries(TestORB -static-libgcc -static-libstdc++)
+target_link_libraries(TestORB)
 
 

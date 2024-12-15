@@ -182,6 +182,7 @@ void extract_frames(const string& input_file, const string& output_folder, int s
 
 
         // 检查hash_list中的哈希值是否相似
+        // TODO: 这个遍历比较绝对可以优化
         for (const auto& hash_value : hash_list) {
             int hamming_distance = __builtin_popcount(hash_value ^ img_hash);
             if (hamming_distance < threshold) {
