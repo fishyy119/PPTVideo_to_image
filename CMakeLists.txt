@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.5.0)
-project(PV2i VERSION 0.1.0 LANGUAGES C CXX)
+project(PV2i VERSION 2.1.0 LANGUAGES C CXX)
+add_definitions(-DPROGRAM_VERSION="${PROJECT_VERSION}")
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 set(CMAKE_BUILD_TYPE "Debug")

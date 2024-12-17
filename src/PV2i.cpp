@@ -234,6 +234,7 @@ string get_input(const string& prompt, const string& default_prompt, const strin
 }
 
 int main() {
+    printf("Program version: %s\n", PROGRAM_VERSION);
     string input_file = get_input("请输入视频文件路径", "1.mp4", "1.mp4");
     string output_folder = get_input("请输入输出文件夹路径", "output_MMDD_HHmmss", get_default_output_folder_name());
     // 如果文件夹不存在，则创建
