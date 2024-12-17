@@ -8,10 +8,14 @@
 #include <set>
 #include <cmath>
 
+#define HASH_WINDOW_SIZE 3  // 相似判断的窗口
+// TODO: 把这个变成自定义参数?
+
 using namespace std;
 using namespace cv;
 namespace fs = std::filesystem;
-// TODO: 自适应跳帧
+// TODO: 自适应跳帧(由于主要时间开销都在帧提取上，因此对此处的优化可以极大加速)
+// TODO: 更好的检测算法
 
 /**
  * @brief 将给定的秒数格式化为 HH:MM:SS 的字符串格式。
@@ -40,15 +44,15 @@ public:
  * @param start 提取起始帧
  * @param end 提取结束帧
  */
-    ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end)
-        : total_duration(total_duration), fps(fps), progress_interval(progress_interval), start(start), end(end) {
-        
-        start_time = chrono::high_resolution_clock::now();
-        // 计算所有需要报告的时间点
-        for (double t = start / fps + 1; t <= total_duration; t += progress_interval * 60) {
-            report_times.push_back(t);
-        }
+ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end)
+    : total_duration(total_duration), fps(fps), progress_interval(progress_interval), start(start), end(end) {
+    
+    start_time = chrono::high_resolution_clock::now();
+    // 计算所有需要报告的时间点
+    for (double t = start / fps + 1; t <= total_duration; t += progress_interval * 60) {
+        report_times.push_back(t);
     }
+}
 
 /**
  * @brief 输出报告
@@ -56,23 +60,23 @@ public:
  * @param elapsed_time 当前已处理到的视频时间（s）
  * @param frame_count 已经提取出来的图像数（有效的）
  */
-    void report_progress(double elapsed_time, int frame_count) {
-        if (!report_times.empty() && elapsed_time >= report_times.front()) {
-            auto now = chrono::high_resolution_clock::now();
-            chrono::duration<double> processed_time = now - start_time;
-            double percent = (elapsed_time * fps - start) / (end - start) * 100;
-            cout << "\r" << std::string(80, ' '); // 清除当前行
-            cout << "\r已处理 " << percent << " % 的视频内容，已花费时间：" 
-                << time_format(processed_time.count()) << "，已提取图片数：" << frame_count << flush;
-            report_times.erase(report_times.begin()); // 移除已报告的时间点
-        }
-    }
-
-    void report_result(int frame_count) {
+void report_progress(double elapsed_time, int frame_count) {
+    if (!report_times.empty() && elapsed_time >= report_times.front()) {
         auto now = chrono::high_resolution_clock::now();
-        chrono::duration<double> total_time = now - start_time;
-        cout << "\n处理总用时：" << time_format(total_time.count()) << "，输出图片数：" << frame_count << endl;
+        chrono::duration<double> processed_time = now - start_time;
+        double percent = (elapsed_time * fps - start) / (end - start) * 100;
+        cout << "\r" << std::string(80, ' '); // 清除当前行
+        cout << "\r已处理 " << percent << " % 的视频内容，已花费时间：" 
+            << time_format(processed_time.count()) << "，已提取图片数：" << frame_count << flush;
+        report_times.erase(report_times.begin()); // 移除已报告的时间点
     }
+}
+
+void report_result(int frame_count) {
+auto now = chrono::high_resolution_clock::now();
+chrono::duration<double> total_time = now - start_time;
+cout << "\n处理总用时：" << time_format(total_time.count()) << "，输出图片数：" << frame_count << endl;
+}
 
 private:
     const double total_duration;  // 总时长
@@ -82,7 +86,9 @@ private:
     const int end;                // 提取结束帧
     chrono::time_point<chrono::high_resolution_clock> start_time; // 开始时间
     vector<double> report_times; // 存储所有报告的时间点
-};
+
+}; // class ProgressReporter
+
 
 /**
  * @brief 计算图像的感知哈希值
@@ -91,11 +97,9 @@ private:
  * @return size_t 计算得到的哈希值
  */
 size_t calculate_pHash(const Mat& img) {
-    // 调整图像大小
+    // 就是感知哈希
     Mat resized;
-    resize(img, resized, Size(32, 32)); // 调整为32x32
-
-    // 转换为灰度图
+    resize(img, resized, Size(32, 32));
     Mat gray;
     cvtColor(resized, gray, COLOR_BGR2GRAY);
 
@@ -109,8 +113,6 @@ size_t calculate_pHash(const Mat& img) {
     
     // 提取左上角8x8的DCT系数
     Mat dct_roi = dct_result(Rect(0, 0, 8, 8));
-
-    // 计算平均值
     double mean = cv::mean(dct_roi)[0];
     
     // 生成哈希值
@@ -127,6 +129,7 @@ size_t calculate_pHash(const Mat& img) {
     
     return hash;
 }
+
 
 // 提取帧函数
 /**
@@ -169,25 +172,15 @@ void extract_frames(const string& input_file, const string& output_folder, int s
         if (!cap.read(frame)) break;
 
         size_t img_hash = calculate_pHash(frame);
-        // TODO: 更好的检测算法
+
         bool similar = false;
-
-        // // 检查哈希值是否相似
-        // auto it = hash_set.lower_bound(img_hash);
-        // if (it != hash_set.end() && abs((int)(*it ^ img_hash)) < threshold) {
-        //     similar = true; // 找到相似哈希值
-        // } else {
-        //     hash_set.insert(img_hash); // 插入新的哈希值
-        // }
-
-
-        // 检查hash_list中的哈希值是否相似
-        // TODO: 这个遍历比较绝对可以优化
-        for (const auto& hash_value : hash_list) {
-            int hamming_distance = __builtin_popcount(hash_value ^ img_hash);
-            if (hamming_distance < threshold) {
-                similar = true;
-                break;
+        if (hash_list.size() >= HASH_WINDOW_SIZE){
+            for (int i = hash_list.size() - HASH_WINDOW_SIZE; i < hash_list.size(); ++i) {
+                int hamming_distance = __builtin_popcount(hash_list[i] ^ img_hash);
+                if (hamming_distance < threshold) {
+                    similar = true;
+                    break;
+                }
             }
         }
 
@@ -256,7 +249,6 @@ int main() {
 
     // TODO: 增加错误变量类型提示
 
-    // 这里调用你的处理函数
     extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval, threshold);
     system("PAUSE");
 
