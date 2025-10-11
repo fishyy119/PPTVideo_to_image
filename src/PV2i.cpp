@@ -5,253 +5,257 @@
 #include <chrono>
 #include <string>
 #include <vector>
-#include <set>
 #include <cmath>
 
-#define HASH_WINDOW_SIZE 3  // ÏàËÆÅĞ¶ÏµÄ´°¿Ú
-// TODO: °ÑÕâ¸ö±ä³É×Ô¶¨Òå²ÎÊı?
+#define HASH_WINDOW_SIZE 3 // ç›¸ä¼¼åˆ¤æ–­çš„çª—å£
+// TODO: æŠŠè¿™ä¸ªå˜æˆè‡ªå®šä¹‰å‚æ•°?
 
 using namespace std;
 using namespace cv;
 namespace fs = std::filesystem;
-// TODO: ×ÔÊÊÓ¦ÌøÖ¡(ÓÉÓÚÖ÷ÒªÊ±¼ä¿ªÏú¶¼ÔÚÖ¡ÌáÈ¡ÉÏ£¬Òò´Ë¶Ô´Ë´¦µÄÓÅ»¯¿ÉÒÔ¼«´ó¼ÓËÙ)
-// TODO: ¸üºÃµÄ¼ì²âËã·¨
+// TODO: è‡ªé€‚åº”è·³å¸§(ç”±äºä¸»è¦æ—¶é—´å¼€é”€éƒ½åœ¨å¸§æå–ä¸Šï¼Œå› æ­¤å¯¹æ­¤å¤„çš„ä¼˜åŒ–å¯ä»¥æå¤§åŠ é€Ÿ)
+// TODO: æ›´å¥½çš„æ£€æµ‹ç®—æ³•
 
 /**
- * @brief ½«¸ø¶¨µÄÃëÊı¸ñÊ½»¯Îª HH:MM:SS µÄ×Ö·û´®¸ñÊ½¡£
- * 
- * @param seconds ×ÜÃëÊı
- * @return string ¸ñÊ½»¯ºóµÄÊ±¼ä×Ö·û´®
+ * @brief å°†ç»™å®šçš„ç§’æ•°æ ¼å¼åŒ–ä¸º HH:MM:SS çš„å­—ç¬¦ä¸²æ ¼å¼ã€‚
+ *
+ * @param seconds æ€»ç§’æ•°
+ * @return string æ ¼å¼åŒ–åçš„æ—¶é—´å­—ç¬¦ä¸²
  */
 string time_format(double seconds) {
-    int hours = int(seconds / 3600);
-    int minutes = int((seconds - hours * 3600) / 60);
-    int secs = int(seconds) % 60;
-    char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", hours, minutes, secs);
-    return string(buffer);
+  int hours = int(seconds / 3600);
+  int minutes = int((seconds - hours * 3600) / 60);
+  int secs = int(seconds) % 60;
+  char buffer[10];
+  snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", hours, minutes, secs);
+  return string(buffer);
 }
 
-// ½ø¶È±¨¸æÀà
+// è¿›åº¦æŠ¥å‘Šç±»
 class ProgressReporter {
-public:
-/**
- * @brief ¹¹Ôìº¯Êı
- * 
- * @param total_duration ÊÓÆµ×ÜÊ±³¤£¨s£©
- * @param fps Ö¡ÂÊ
- * @param progress_interval ½ø¶È±¨¸æ¼ä¸ô£¨min£©
- * @param start ÌáÈ¡ÆğÊ¼Ö¡
- * @param end ÌáÈ¡½áÊøÖ¡
- */
-ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end)
-    : total_duration(total_duration), fps(fps), progress_interval(progress_interval), start(start), end(end) {
-    
+  public:
+  /**
+   * @brief æ„é€ å‡½æ•°
+   *
+   * @param total_duration è§†é¢‘æ€»æ—¶é•¿ï¼ˆsï¼‰
+   * @param fps å¸§ç‡
+   * @param progress_interval è¿›åº¦æŠ¥å‘Šé—´éš”ï¼ˆminï¼‰
+   * @param start æå–èµ·å§‹å¸§
+   * @param end æå–ç»“æŸå¸§
+   */
+  ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end)
+      : total_duration(total_duration), fps(fps), progress_interval(progress_interval),
+        start(start), end(end) {
+
     start_time = chrono::high_resolution_clock::now();
-    // ¼ÆËãËùÓĞĞèÒª±¨¸æµÄÊ±¼äµã
+    // è®¡ç®—æ‰€æœ‰éœ€è¦æŠ¥å‘Šçš„æ—¶é—´ç‚¹
     for (double t = start / fps + 1; t <= total_duration; t += progress_interval * 60) {
-        report_times.push_back(t);
+      report_times.push_back(t);
     }
-}
+  }
 
-/**
- * @brief Êä³ö±¨¸æ
- * 
- * @param elapsed_time µ±Ç°ÒÑ´¦Àíµ½µÄÊÓÆµÊ±¼ä£¨s£©
- * @param frame_count ÒÑ¾­ÌáÈ¡³öÀ´µÄÍ¼ÏñÊı£¨ÓĞĞ§µÄ£©
- */
-void report_progress(double elapsed_time, int frame_count) {
+  /**
+   * @brief è¾“å‡ºæŠ¥å‘Š
+   *
+   * @param elapsed_time å½“å‰å·²å¤„ç†åˆ°çš„è§†é¢‘æ—¶é—´ï¼ˆsï¼‰
+   * @param frame_count å·²ç»æå–å‡ºæ¥çš„å›¾åƒæ•°ï¼ˆæœ‰æ•ˆçš„ï¼‰
+   */
+  void report_progress(double elapsed_time, int frame_count) {
     if (!report_times.empty() && elapsed_time >= report_times.front()) {
-        auto now = chrono::high_resolution_clock::now();
-        chrono::duration<double> processed_time = now - start_time;
-        double percent = (elapsed_time * fps - start) / (end - start) * 100;
-        cout << "\r" << std::string(80, ' '); // Çå³ıµ±Ç°ĞĞ
-        cout << "\rÒÑ´¦Àí " << percent << " % µÄÊÓÆµÄÚÈİ£¬ÒÑ»¨·ÑÊ±¼ä£º" 
-            << time_format(processed_time.count()) << "£¬ÒÑÌáÈ¡Í¼Æ¬Êı£º" << frame_count << flush;
-        report_times.erase(report_times.begin()); // ÒÆ³ıÒÑ±¨¸æµÄÊ±¼äµã
+      auto now = chrono::high_resolution_clock::now();
+      chrono::duration<double> processed_time = now - start_time;
+      double percent = (elapsed_time * fps - start) / (end - start) * 100;
+      cout << "\r" << std::string(80, ' '); // æ¸…é™¤å½“å‰è¡Œ
+      cout << "\rå·²å¤„ç† " << percent << " % çš„è§†é¢‘å†…å®¹ï¼Œå·²èŠ±è´¹æ—¶é—´ï¼š"
+           << time_format(processed_time.count()) << "ï¼Œå·²æå–å›¾ç‰‡æ•°ï¼š" << frame_count << flush;
+      report_times.erase(report_times.begin()); // ç§»é™¤å·²æŠ¥å‘Šçš„æ—¶é—´ç‚¹
     }
-}
+  }
 
-void report_result(int frame_count) {
-auto now = chrono::high_resolution_clock::now();
-chrono::duration<double> total_time = now - start_time;
-cout << "\n´¦Àí×ÜÓÃÊ±£º" << time_format(total_time.count()) << "£¬Êä³öÍ¼Æ¬Êı£º" << frame_count << endl;
-}
+  void report_result(int frame_count) {
+    auto now = chrono::high_resolution_clock::now();
+    chrono::duration<double> total_time = now - start_time;
+    cout << "\nå¤„ç†æ€»ç”¨æ—¶ï¼š" << time_format(total_time.count()) << "ï¼Œè¾“å‡ºå›¾ç‰‡æ•°ï¼š" << frame_count
+         << endl;
+  }
 
-private:
-    const double total_duration;  // ×ÜÊ±³¤
-    const int fps;                // Ö¡ÂÊ
-    const int progress_interval;   // ½ø¶È±¨¸æ¼ä¸ô
-    const int start;              // ÌáÈ¡¿ªÊ¼Ö¡
-    const int end;                // ÌáÈ¡½áÊøÖ¡
-    chrono::time_point<chrono::high_resolution_clock> start_time; // ¿ªÊ¼Ê±¼ä
-    vector<double> report_times; // ´æ´¢ËùÓĞ±¨¸æµÄÊ±¼äµã
+  private:
+  const double total_duration;                                  // æ€»æ—¶é•¿
+  const int fps;                                                // å¸§ç‡
+  const int progress_interval;                                  // è¿›åº¦æŠ¥å‘Šé—´éš”
+  const int start;                                              // æå–å¼€å§‹å¸§
+  const int end;                                                // æå–ç»“æŸå¸§
+  chrono::time_point<chrono::high_resolution_clock> start_time; // å¼€å§‹æ—¶é—´
+  vector<double> report_times;                                  // å­˜å‚¨æ‰€æœ‰æŠ¥å‘Šçš„æ—¶é—´ç‚¹
 
 }; // class ProgressReporter
 
-
 /**
- * @brief ¼ÆËãÍ¼ÏñµÄ¸ĞÖª¹şÏ£Öµ
- * 
- * @param img ÊäÈëÍ¼Ïñ
- * @return size_t ¼ÆËãµÃµ½µÄ¹şÏ£Öµ
+ * @brief è®¡ç®—å›¾åƒçš„æ„ŸçŸ¥å“ˆå¸Œå€¼
+ *
+ * @param img è¾“å…¥å›¾åƒ
+ * @return size_t è®¡ç®—å¾—åˆ°çš„å“ˆå¸Œå€¼
  */
 size_t calculate_pHash(const Mat& img) {
-    // ¾ÍÊÇ¸ĞÖª¹şÏ£
-    Mat resized;
-    resize(img, resized, Size(32, 32));
-    Mat gray;
-    cvtColor(resized, gray, COLOR_BGR2GRAY);
+  // å°±æ˜¯æ„ŸçŸ¥å“ˆå¸Œ
+  Mat resized;
+  resize(img, resized, Size(32, 32));
+  Mat gray;
+  cvtColor(resized, gray, COLOR_BGR2GRAY);
 
-    // ºóÃæDCTº¯ÊıĞèÒª¸¡µãĞÍµÄ£¬ËùÒÔÔÚ´Ë×ª»¯Ò»ÏÂ
-    Mat gray_float;
-    gray.convertTo(gray_float, CV_64F);
+  // åé¢DCTå‡½æ•°éœ€è¦æµ®ç‚¹å‹çš„ï¼Œæ‰€ä»¥åœ¨æ­¤è½¬åŒ–ä¸€ä¸‹
+  Mat gray_float;
+  gray.convertTo(gray_float, CV_64F);
 
-    // ¼ÆËãDCT
-    Mat dct_result;
-    dct(gray_float, dct_result);
-    
-    // ÌáÈ¡×óÉÏ½Ç8x8µÄDCTÏµÊı
-    Mat dct_roi = dct_result(Rect(0, 0, 8, 8));
-    double mean = cv::mean(dct_roi)[0];
-    
-    // Éú³É¹şÏ£Öµ
-    size_t hash = 0;
-    for (int i = 0; i < dct_roi.rows; ++i) {
-        for (int j = 0; j < dct_roi.cols; ++j) {
-            // Èç¹ûDCTÏµÊı´óÓÚÆ½¾ùÖµ£¬ÔòÉèÖÃ¶ÔÓ¦µÄÎ»Îª1
-            hash <<= 1;
-            if (dct_roi.at<double>(i, j) > mean) {
-                hash |= 1;
-            }
-        }
+  // è®¡ç®—DCT
+  Mat dct_result;
+  dct(gray_float, dct_result);
+
+  // æå–å·¦ä¸Šè§’8x8çš„DCTç³»æ•°
+  Mat dct_roi = dct_result(Rect(0, 0, 8, 8));
+  double mean = cv::mean(dct_roi)[0];
+
+  // ç”Ÿæˆå“ˆå¸Œå€¼
+  size_t hash = 0;
+  for (int i = 0; i < dct_roi.rows; ++i) {
+    for (int j = 0; j < dct_roi.cols; ++j) {
+      // å¦‚æœDCTç³»æ•°å¤§äºå¹³å‡å€¼ï¼Œåˆ™è®¾ç½®å¯¹åº”çš„ä½ä¸º1
+      hash <<= 1;
+      if (dct_roi.at<double>(i, j) > mean) {
+        hash |= 1;
+      }
     }
-    
-    return hash;
+  }
+
+  return hash;
 }
 
-
-// ÌáÈ¡Ö¡º¯Êı
+// æå–å¸§å‡½æ•°
 /**
- * @brief ´ÓÊÓÆµÎÄ¼şÖĞÌáÈ¡Ö¸¶¨·¶Î§µÄÖ¡£¬²¢±£´æµ½Ö¸¶¨ÎÄ¼ş¼Ğ¡£
- * 
- * @param input_file ÊäÈëÊÓÆµÎÄ¼şÂ·¾¶
- * @param output_folder Êä³öÖ¡µÄÎÄ¼ş¼ĞÂ·¾¶
- * @param start ¿ªÊ¼Ê±¼ä£¨min£©
- * @param end ½áÊøÊ±¼ä£¨min£©
- * @param frame_skip Ìø¹ıµÄÖ¡Êı
- * @param progress_interval ½ø¶ÈÌáÊ¾¼ä¸ôÊ±¼ä£¨min£©
- * @param threshold ÏàËÆ¶È±È½ÏãĞÖµ
+ * @brief ä»è§†é¢‘æ–‡ä»¶ä¸­æå–æŒ‡å®šèŒƒå›´çš„å¸§ï¼Œå¹¶ä¿å­˜åˆ°æŒ‡å®šæ–‡ä»¶å¤¹ã€‚
+ *
+ * @param input_file è¾“å…¥è§†é¢‘æ–‡ä»¶è·¯å¾„
+ * @param output_folder è¾“å‡ºå¸§çš„æ–‡ä»¶å¤¹è·¯å¾„
+ * @param start å¼€å§‹æ—¶é—´ï¼ˆminï¼‰
+ * @param end ç»“æŸæ—¶é—´ï¼ˆminï¼‰
+ * @param frame_skip è·³è¿‡çš„å¸§æ•°
+ * @param progress_interval è¿›åº¦æç¤ºé—´éš”æ—¶é—´ï¼ˆminï¼‰
+ * @param threshold ç›¸ä¼¼åº¦æ¯”è¾ƒé˜ˆå€¼
  */
-void extract_frames(const string& input_file, const string& output_folder, int start, int end, int frame_skip, int progress_interval, int threshold) {
-    // ´ò¿ªÊÓÆµÎÄ¼ş£¬²¢ÇÒ¼ÆËãÖ¡ÊıµÈ²ÎÊı
-    VideoCapture cap(input_file);
+void extract_frames(const string& input_file, const string& output_folder, int start, int end,
+                    int frame_skip, int progress_interval, int threshold) {
+  // æ‰“å¼€è§†é¢‘æ–‡ä»¶ï¼Œå¹¶ä¸”è®¡ç®—å¸§æ•°ç­‰å‚æ•°
+  VideoCapture cap(input_file);
 
-    if (!cap.isOpened()) {
-        cerr << "ÎŞ·¨´ò¿ªÊÓÆµÎÄ¼ş" << endl;
-        return;
+  if (!cap.isOpened()) {
+    cerr << "æ— æ³•æ‰“å¼€è§†é¢‘æ–‡ä»¶" << endl;
+    return;
+  }
+
+  int fps = cap.get(CAP_PROP_FPS);                    // å¸§ç‡
+  int total_frames = cap.get(CAP_PROP_FRAME_COUNT);   // æ€»å¸§æ•°
+  double total_duration = total_frames / double(fps); // æ€»æ—¶é•¿ï¼ˆsï¼‰
+
+  int start_frame = (start <= 0) ? 0 : start * 60 * fps;                         // èµ·å§‹å¸§
+  int end_frame = (end <= 0) ? total_frames : min(end * 60 * fps, total_frames); // ç»“æŸå¸§
+
+  // æŠ¥å‘Šç”¨ï¼Œå¯èƒ½è¦æ”¹
+  ProgressReporter progress_reporter(total_duration, fps, progress_interval, start_frame,
+                                     end_frame);
+  vector<size_t> hash_list; // å­˜å‚¨å“ˆå¸Œå€¼
+  // set<size_t> hash_set; // å­˜å‚¨å“ˆå¸Œå€¼
+  int frame_count = 0; // å·²ç»æå–å‡ºæ¥çš„å›¾åƒæ•°ï¼ˆæœ‰æ•ˆçš„ï¼‰
+  int frame_index = start_frame;
+
+  Mat frame;
+  while (cap.isOpened()) {
+    cap.set(CAP_PROP_POS_FRAMES, frame_index);
+    if (!cap.read(frame))
+      break;
+
+    size_t img_hash = calculate_pHash(frame);
+
+    bool similar = false;
+    if (hash_list.size() >= HASH_WINDOW_SIZE) {
+      for (int i = hash_list.size() - HASH_WINDOW_SIZE; i < hash_list.size(); ++i) {
+        int hamming_distance = __builtin_popcount(hash_list[i] ^ img_hash);
+        if (hamming_distance < threshold) {
+          similar = true;
+          break;
+        }
+      }
     }
 
-    int fps = cap.get(CAP_PROP_FPS); // Ö¡ÂÊ
-    int total_frames = cap.get(CAP_PROP_FRAME_COUNT); // ×ÜÖ¡Êı
-    double total_duration = total_frames / double(fps); // ×ÜÊ±³¤£¨s£©
-
-    int start_frame = (start <= 0) ? 0 : start * 60 * fps; // ÆğÊ¼Ö¡
-    int end_frame = (end <= 0) ? total_frames : min(end * 60 * fps, total_frames); // ½áÊøÖ¡
-
-    // ±¨¸æÓÃ£¬¿ÉÄÜÒª¸Ä
-    ProgressReporter progress_reporter(total_duration, fps, progress_interval, start_frame, end_frame);
-    vector<size_t> hash_list; // ´æ´¢¹şÏ£Öµ
-    // set<size_t> hash_set; // ´æ´¢¹şÏ£Öµ
-    int frame_count = 0; // ÒÑ¾­ÌáÈ¡³öÀ´µÄÍ¼ÏñÊı£¨ÓĞĞ§µÄ£©
-    int frame_index = start_frame;
-
-    Mat frame;
-    while (cap.isOpened()) {
-        cap.set(CAP_PROP_POS_FRAMES, frame_index);
-        if (!cap.read(frame)) break;
-
-        size_t img_hash = calculate_pHash(frame);
-
-        bool similar = false;
-        if (hash_list.size() >= HASH_WINDOW_SIZE){
-            for (int i = hash_list.size() - HASH_WINDOW_SIZE; i < hash_list.size(); ++i) {
-                int hamming_distance = __builtin_popcount(hash_list[i] ^ img_hash);
-                if (hamming_distance < threshold) {
-                    similar = true;
-                    break;
-                }
-            }
-        }
-
-        if (!similar) {
-            double elapsed_time = cap.get(CAP_PROP_POS_FRAMES) / double(fps); // µ±Ç°ÒÑ´¦Àíµ½µÄÊÓÆµÊ±¼ä£¨s£©
-            string frame_path = output_folder + "/frame_" + to_string(int(elapsed_time / 60)) + "min_" + to_string(frame_count) + ".jpg";
-            imwrite(frame_path, frame);
-            hash_list.push_back(img_hash);
-            progress_reporter.report_progress(elapsed_time, frame_count);
-            frame_count++;
-        }
-
-        if (cap.get(CAP_PROP_POS_FRAMES) >= end_frame) break;
-        frame_index += frame_skip;
+    if (!similar) {
+      double elapsed_time =
+          cap.get(CAP_PROP_POS_FRAMES) / double(fps); // å½“å‰å·²å¤„ç†åˆ°çš„è§†é¢‘æ—¶é—´ï¼ˆsï¼‰
+      string frame_path = output_folder + "/frame_" + to_string(int(elapsed_time / 60)) + "min_" +
+                          to_string(frame_count) + ".jpg";
+      imwrite(frame_path, frame);
+      hash_list.push_back(img_hash);
+      progress_reporter.report_progress(elapsed_time, frame_count);
+      frame_count++;
     }
 
-    cap.release();
-    progress_reporter.report_result(frame_count);
+    if (cap.get(CAP_PROP_POS_FRAMES) >= end_frame)
+      break;
+    frame_index += frame_skip;
+  }
+
+  cap.release();
+  progress_reporter.report_result(frame_count);
 }
 
-// »ñÈ¡µ±Ç°Ê±¼ä²¢¸ñÊ½»¯Îª "output_MMDD_HHmmss"
+// è·å–å½“å‰æ—¶é—´å¹¶æ ¼å¼åŒ–ä¸º "output_MMDD_HHmmss"
 string get_default_output_folder_name() {
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    std::tm now_tm = *std::localtime(&now_c);
+  auto now = std::chrono::system_clock::now();
+  std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+  std::tm now_tm = *std::localtime(&now_c);
 
-    std::ostringstream oss;
-    oss << "output_"
-        << std::setfill('0') << std::setw(2) << now_tm.tm_mon + 1
-        << std::setfill('0') << std::setw(2) << now_tm.tm_mday << "_"
-        << std::setfill('0') << std::setw(2) << now_tm.tm_hour
-        << std::setfill('0') << std::setw(2) << now_tm.tm_min
-        << std::setfill('0') << std::setw(2) << now_tm.tm_sec;
+  std::ostringstream oss;
+  oss << "output_" << std::setfill('0') << std::setw(2) << now_tm.tm_mon + 1 << std::setfill('0')
+      << std::setw(2) << now_tm.tm_mday << "_" << std::setfill('0') << std::setw(2)
+      << now_tm.tm_hour << std::setfill('0') << std::setw(2) << now_tm.tm_min << std::setfill('0')
+      << std::setw(2) << now_tm.tm_sec;
 
-    return oss.str();
+  return oss.str();
 }
 
 /**
- * @brief »ñÈ¡ÓÃ»§ÊäÈë£¬Èç¹ûÎª¿ÕÔò·µ»ØÖ¸¶¨µÄÄ¬ÈÏÖµ¡£
- * 
- * @param prompt ÌáÊ¾ĞÅÏ¢
- * @param default_prompt Ä¬ÈÏÌáÊ¾Öµ
- * @param default_value ·µ»ØµÄÄ¬ÈÏÖµ
- * @return string ÓÃ»§ÊäÈëµÄ×Ö·û´®»ò·µ»ØµÄÄ¬ÈÏÖµ
+ * @brief è·å–ç”¨æˆ·è¾“å…¥ï¼Œå¦‚æœä¸ºç©ºåˆ™è¿”å›æŒ‡å®šçš„é»˜è®¤å€¼ã€‚
+ *
+ * @param prompt æç¤ºä¿¡æ¯
+ * @param default_prompt é»˜è®¤æç¤ºå€¼
+ * @param default_value è¿”å›çš„é»˜è®¤å€¼
+ * @return string ç”¨æˆ·è¾“å…¥çš„å­—ç¬¦ä¸²æˆ–è¿”å›çš„é»˜è®¤å€¼
  */
 string get_input(const string& prompt, const string& default_prompt, const string& default_value) {
-    cout << prompt << " (Ä¬ÈÏ: " << default_prompt << "): ";
-    string input;
-    getline(cin, input);
-    return input.empty() ? default_value : input; // Èç¹ûÊäÈëÎª¿Õ£¬Ôò·µ»ØÄ¬ÈÏÖµ
+  cout << prompt << " (é»˜è®¤: " << default_prompt << "): ";
+  string input;
+  getline(cin, input);
+  return input.empty() ? default_value : input; // å¦‚æœè¾“å…¥ä¸ºç©ºï¼Œåˆ™è¿”å›é»˜è®¤å€¼
 }
 
 int main() {
-    printf("Program version: %s\n", PROGRAM_VERSION);
-    string input_file = get_input("ÇëÊäÈëÊÓÆµÎÄ¼şÂ·¾¶", "1.mp4", "1.mp4");
-    string output_folder = get_input("ÇëÊäÈëÊä³öÎÄ¼ş¼ĞÂ·¾¶", "output_MMDD_HHmmss", get_default_output_folder_name());
-    // Èç¹ûÎÄ¼ş¼Ğ²»´æÔÚ£¬Ôò´´½¨
-    if (!fs::exists(output_folder)) {
-        fs::create_directories(output_folder);
-    }
+  system("chcp 65001");
+  printf("Program version: %s\n", PROGRAM_VERSION);
+  string input_file = get_input("è¯·è¾“å…¥è§†é¢‘æ–‡ä»¶è·¯å¾„", "1.mp4", "1.mp4");
+  string output_folder =
+      get_input("è¯·è¾“å…¥è¾“å‡ºæ–‡ä»¶å¤¹è·¯å¾„", "output_MMDD_HHmmss", get_default_output_folder_name());
+  if (!fs::exists(output_folder)) {
+    fs::create_directories(output_folder);
+  }
 
-    int start = stoi(get_input("ÇëÊäÈëÆğµã(·ÖÖÓ)", "¿ªÍ·", "0"));
-    int end = stoi(get_input("ÇëÊäÈëÖÕµã(·ÖÖÓ)", "½áÎ²", "-1"));
-    int frame_skip = stoi(get_input("ÇëÊäÈëÌøÖ¡¼ì²âÖµ", "30", "30"));
-    int progress_interval = stoi(get_input("ÇëÊäÈë½ø¶ÈÌáÊ¾¼ä¸ôÊ±¼ä(·ÖÖÓ)", "5", "5"));
-    int threshold = stoi(get_input("ÇëÊäÈëÏàËÆ¶È±È½ÏãĞÖµ", "4", "4"));
+  int start = stoi(get_input("è¯·è¾“å…¥èµ·ç‚¹(åˆ†é’Ÿ)", "å¼€å¤´", "0"));
+  int end = stoi(get_input("è¯·è¾“å…¥ç»ˆç‚¹(åˆ†é’Ÿ)", "ç»“å°¾", "-1"));
+  int frame_skip = stoi(get_input("è¯·è¾“å…¥è·³å¸§æ£€æµ‹å€¼", "30", "30"));
+  int progress_interval = stoi(get_input("è¯·è¾“å…¥è¿›åº¦æç¤ºé—´éš”æ—¶é—´(åˆ†é’Ÿ)", "5", "5"));
+  int threshold = stoi(get_input("è¯·è¾“å…¥ç›¸ä¼¼åº¦æ¯”è¾ƒé˜ˆå€¼", "4", "4"));
 
-    // TODO: Ôö¼Ó´íÎó±äÁ¿ÀàĞÍÌáÊ¾
+  // TODO: å¢åŠ é”™è¯¯å˜é‡ç±»å‹æç¤º
 
-    extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval, threshold);
-    system("PAUSE");
+  extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval, threshold);
+  system("PAUSE");
 
-    return 0;
+  return 0;
 }
