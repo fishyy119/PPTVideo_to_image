@@ -2,3 +2,5 @@
 /build
 /Release
 .vscode/c_cpp_properties.json
+
+output_*

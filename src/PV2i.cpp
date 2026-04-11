@@ -1,5 +1,10 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include "ArgumentParser.hpp"
+#include "RunOptions.hpp"
+
+#include <algorithm>
+#include <cstdio>
 #include <iostream>
 #include <filesystem>
 #include <chrono>
@@ -42,14 +47,19 @@ class ProgressReporter {
    * @param progress_interval 进度报告间隔（min）
    * @param start 提取起始帧
    * @param end 提取结束帧
+   * @param enabled 是否启用进度输出
    */
-  ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end)
+  ProgressReporter(double total_duration, int fps, int progress_interval, int start, int end,
+                   bool enabled)
       : total_duration(total_duration), fps(fps), progress_interval(progress_interval),
-        start(start), end(end) {
+        start(start), end(end), enabled(enabled) {
 
     start_time = chrono::high_resolution_clock::now();
+    if (!enabled) {
+      return;
+    }
     // 计算所有需要报告的时间点
-    for (double t = start / fps + 1; t <= total_duration; t += progress_interval * 60) {
+    for (double t = start / double(fps) + 1; t <= total_duration; t += progress_interval * 60) {
       report_times.push_back(t);
     }
   }
@@ -61,6 +71,9 @@ class ProgressReporter {
    * @param frame_count 已经提取出来的图像数（有效的）
    */
   void report_progress(double elapsed_time, int frame_count) {
+    if (!enabled) {
+      return;
+    }
     if (!report_times.empty() && elapsed_time >= report_times.front()) {
       auto now = chrono::high_resolution_clock::now();
       chrono::duration<double> processed_time = now - start_time;
@@ -72,7 +85,15 @@ class ProgressReporter {
     }
   }
 
+  /**
+   * @brief 输出处理完成后的统计结果。
+   *
+   * @param frame_count 最终输出的图片数量。
+   */
   void report_result(int frame_count) {
+    if (!enabled) {
+      return;
+    }
     auto now = chrono::high_resolution_clock::now();
     chrono::duration<double> total_time = now - start_time;
     cout << "\n处理总用时：" << time_format(total_time.count()) << "，输出图片数：" << frame_count
@@ -85,6 +106,7 @@ class ProgressReporter {
   const int progress_interval;                                  // 进度报告间隔
   const int start;                                              // 提取开始帧
   const int end;                                                // 提取结束帧
+  const bool enabled;                                           // 是否启用输出
   chrono::time_point<chrono::high_resolution_clock> start_time; // 开始时间
   vector<double> report_times;                                  // 存储所有报告的时间点
 
@@ -132,36 +154,43 @@ size_t calculate_pHash(const Mat& img) {
 
 // 提取帧函数
 /**
- * @brief 从视频文件中提取指定范围的帧，并保存到指定文件夹。
+ * @brief 根据运行参数提取视频帧并输出到目标目录。
  *
- * @param input_file 输入视频文件路径
- * @param output_folder 输出帧的文件夹路径
- * @param start 开始时间（min）
- * @param end 结束时间（min）
- * @param frame_skip 跳过的帧数
- * @param progress_interval 进度提示间隔时间（min）
- * @param threshold 相似度比较阈值
+ * @param options 已完成解析与校验的运行参数。
+ * @return bool 提取成功返回 `true`，出现文件或视频信息错误时返回 `false`。
  */
-void extract_frames(const string& input_file, const string& output_folder, int start, int end,
-                    int frame_skip, int progress_interval, int threshold) {
+bool extract_frames(const RunOptions& options) {
   // 打开视频文件，并且计算帧数等参数
-  VideoCapture cap(input_file);
+  VideoCapture cap(options.input_file);
 
   if (!cap.isOpened()) {
-    cerr << "无法打开视频文件" << endl;
-    return;
+    cerr << "无法打开视频文件: " << options.input_file << endl;
+    return false;
   }
 
-  int fps = cap.get(CAP_PROP_FPS);                    // 帧率
-  int total_frames = cap.get(CAP_PROP_FRAME_COUNT);   // 总帧数
+  int fps = cap.get(CAP_PROP_FPS);                  // 帧率
+  int total_frames = cap.get(CAP_PROP_FRAME_COUNT); // 总帧数
+  if (fps <= 0 || total_frames <= 0) {
+    cerr << "无法读取有效的视频帧信息" << endl;
+    return false;
+  }
   double total_duration = total_frames / double(fps); // 总时长（s）
 
-  int start_frame = (start <= 0) ? 0 : start * 60 * fps;                         // 起始帧
-  int end_frame = (end <= 0) ? total_frames : min(end * 60 * fps, total_frames); // 结束帧
+  int start_frame = (options.start_minutes <= 0) ? 0 : options.start_minutes * 60 * fps; // 起始帧
+  int end_frame =
+      (options.end_minutes <= 0) ? total_frames : min(options.end_minutes * 60 * fps, total_frames);
+  if (start_frame >= total_frames) {
+    cerr << "起点超出了视频时长" << endl;
+    return false;
+  }
+  if (end_frame <= start_frame) {
+    cerr << "目标片段为空，请检查起止时间" << endl;
+    return false;
+  }
 
   // 报告用，可能要改
-  ProgressReporter progress_reporter(total_duration, fps, progress_interval, start_frame,
-                                     end_frame);
+  ProgressReporter progress_reporter(total_duration, fps, options.progress_interval, start_frame,
+                                     end_frame, !options.quiet);
   vector<size_t> hash_list; // 存储哈希值
   // set<size_t> hash_set; // 存储哈希值
   int frame_count = 0; // 已经提取出来的图像数（有效的）
@@ -178,8 +207,9 @@ void extract_frames(const string& input_file, const string& output_folder, int s
     bool similar = false;
     if (hash_list.size() >= HASH_WINDOW_SIZE) {
       for (int i = hash_list.size() - HASH_WINDOW_SIZE; i < hash_list.size(); ++i) {
-        int hamming_distance = __builtin_popcount(hash_list[i] ^ img_hash);
-        if (hamming_distance < threshold) {
+        int hamming_distance =
+            __builtin_popcountll(static_cast<unsigned long long>(hash_list[i] ^ img_hash));
+        if (hamming_distance < options.threshold) {
           similar = true;
           break;
         }
@@ -189,8 +219,8 @@ void extract_frames(const string& input_file, const string& output_folder, int s
     if (!similar) {
       double elapsed_time =
           cap.get(CAP_PROP_POS_FRAMES) / double(fps); // 当前已处理到的视频时间（s）
-      string frame_path = output_folder + "/frame_" + to_string(int(elapsed_time / 60)) + "min_" +
-                          to_string(frame_count) + ".jpg";
+      string frame_path = options.output_folder + "/frame_" + to_string(int(elapsed_time / 60)) +
+                          "min_" + to_string(frame_count) + ".jpg";
       imwrite(frame_path, frame);
       hash_list.push_back(img_hash);
       progress_reporter.report_progress(elapsed_time, frame_count);
@@ -199,63 +229,69 @@ void extract_frames(const string& input_file, const string& output_folder, int s
 
     if (cap.get(CAP_PROP_POS_FRAMES) >= end_frame)
       break;
-    frame_index += frame_skip;
+    frame_index += options.frame_skip;
   }
 
   cap.release();
   progress_reporter.report_result(frame_count);
-}
-
-// 获取当前时间并格式化为 "output_MMDD_HHmmss"
-string get_default_output_folder_name() {
-  auto now = std::chrono::system_clock::now();
-  std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-  std::tm now_tm = *std::localtime(&now_c);
-
-  std::ostringstream oss;
-  oss << "output_" << std::setfill('0') << std::setw(2) << now_tm.tm_mon + 1 << std::setfill('0')
-      << std::setw(2) << now_tm.tm_mday << "_" << std::setfill('0') << std::setw(2)
-      << now_tm.tm_hour << std::setfill('0') << std::setw(2) << now_tm.tm_min << std::setfill('0')
-      << std::setw(2) << now_tm.tm_sec;
-
-  return oss.str();
+  return true;
 }
 
 /**
- * @brief 获取用户输入，如果为空则返回指定的默认值。
+ * @brief 程序主入口，负责参数解析、模式分流与任务调度。
  *
- * @param prompt 提示信息
- * @param default_prompt 默认提示值
- * @param default_value 返回的默认值
- * @return string 用户输入的字符串或返回的默认值
+ * @param argc 命令行参数个数。
+ * @param argv 命令行参数数组。
+ * @return int 成功返回 `0`，失败返回非 `0` 错误码。
  */
-string get_input(const string& prompt, const string& default_prompt, const string& default_value) {
-  cout << prompt << " (默认: " << default_prompt << "): ";
-  string input;
-  getline(cin, input);
-  return input.empty() ? default_value : input; // 如果输入为空，则返回默认值
-}
-
-int main() {
+int main(int argc, char** argv) {
   system("chcp 65001");
   printf("Program version: %s\n", PROGRAM_VERSION);
-  string input_file = get_input("请输入视频文件路径", "1.mp4", "1.mp4");
-  string output_folder =
-      get_input("请输入输出文件夹路径", "output_MMDD_HHmmss", get_default_output_folder_name());
-  if (!fs::exists(output_folder)) {
-    fs::create_directories(output_folder);
+
+  CliParseResult parse_result = parse_cli_arguments(argc, argv);
+  if (!parse_result.error_message.empty()) {
+    cerr << parse_result.error_message << endl << endl;
+    print_cli_help(cerr);
+    return 1;
   }
 
-  int start = stoi(get_input("请输入起点(分钟)", "开头", "0"));
-  int end = stoi(get_input("请输入终点(分钟)", "结尾", "-1"));
-  int frame_skip = stoi(get_input("请输入跳帧检测值", "30", "30"));
-  int progress_interval = stoi(get_input("请输入进度提示间隔时间(分钟)", "5", "5"));
-  int threshold = stoi(get_input("请输入相似度比较阈值", "4", "4"));
+  if (parse_result.show_help) {
+    print_cli_help(cout);
+    return 0;
+  }
 
-  // TODO: 增加错误变量类型提示
+  if (parse_result.show_version) {
+    return 0;
+  }
 
-  extract_frames(input_file, output_folder, start, end, frame_skip, progress_interval, threshold);
-  system("PAUSE");
+  const bool interactive_mode = (argc == 1) || parse_result.interactive;
+  RunOptions options = interactive_mode ? prompt_for_options(parse_result.partial_options)
+                                        : merge_with_defaults(parse_result.partial_options);
+  const auto finish = [interactive_mode](int exit_code) {
+    if (interactive_mode) {
+      system("PAUSE");
+    }
+    return exit_code;
+  };
 
-  return 0;
+  const string validation_error = validate_options(options);
+  if (!validation_error.empty()) {
+    cerr << "参数错误: " << validation_error << endl;
+    return finish(1);
+  }
+
+  std::error_code error_code;
+  if (!fs::exists(options.output_folder) &&
+      !fs::create_directories(options.output_folder, error_code)) {
+    cerr << "无法创建输出文件夹: " << options.output_folder << endl;
+    if (error_code) {
+      cerr << error_code.message() << endl;
+    }
+    return finish(1);
+  }
+
+  if (!extract_frames(options)) {
+    return finish(1);
+  }
+  return finish(0);
 }
