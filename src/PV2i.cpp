@@ -8,6 +8,8 @@
 #include <iostream>
 #include <filesystem>
 #include <chrono>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -78,8 +80,10 @@ class ProgressReporter {
       auto now = chrono::high_resolution_clock::now();
       chrono::duration<double> processed_time = now - start_time;
       double percent = (elapsed_time * fps - start) / (end - start) * 100;
+      ostringstream formatted_percent;
+      formatted_percent << fixed << setprecision(2) << percent;
       cout << "\r" << std::string(80, ' '); // 清除当前行
-      cout << "\r已处理 " << percent << " % 的视频内容，已花费时间："
+      cout << "\r已处理 " << formatted_percent.str() << " % 的视频内容，已花费时间："
            << time_format(processed_time.count()) << "，已提取图片数：" << frame_count << flush;
       report_times.erase(report_times.begin()); // 移除已报告的时间点
     }

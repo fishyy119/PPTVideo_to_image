@@ -10,6 +10,8 @@
         "*.msg": "ros2.interface",
         "*.srv": "ros2.interface",
         "*.toml": "toml",
-        "format": "cpp"
+        "format": "cpp",
+        "iostream": "cpp",
+        "iosfwd": "cpp"
     }
 }
