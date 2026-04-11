@@ -225,7 +225,20 @@ bool extract_frames(const RunOptions& options) {
           cap.get(CAP_PROP_POS_FRAMES) / double(fps); // 当前已处理到的视频时间（s）
       string frame_path = options.output_folder + "/frame_" + to_string(int(elapsed_time / 60)) +
                           "min_" + to_string(frame_count) + ".jpg";
-      imwrite(frame_path, frame);
+      bool write_success = false;
+      try {
+        write_success = imwrite(frame_path, frame);
+      } catch (const cv::Exception& e) {
+        cerr << "写入图片失败: " << frame_path << endl;
+        cerr << e.what() << endl;
+        return false;
+      }
+
+      if (!write_success) {
+        cerr << "写入图片失败: " << frame_path << endl;
+        return false;
+      }
+
       hash_list.push_back(img_hash);
       progress_reporter.report_progress(elapsed_time, frame_count);
       frame_count++;
@@ -285,9 +298,24 @@ int main(int argc, char** argv) {
   }
 
   std::error_code error_code;
-  if (!fs::exists(options.output_folder) &&
-      !fs::create_directories(options.output_folder, error_code)) {
+  const bool output_path_exists = fs::exists(options.output_folder, error_code);
+  if (error_code) {
+    cerr << "无法访问输出路径: " << options.output_folder << endl;
+    cerr << error_code.message() << endl;
+    return finish(1);
+  }
+
+  if (!output_path_exists && !fs::create_directories(options.output_folder, error_code)) {
     cerr << "无法创建输出文件夹: " << options.output_folder << endl;
+    if (error_code) {
+      cerr << error_code.message() << endl;
+    }
+    return finish(1);
+  }
+
+  error_code.clear();
+  if (!fs::is_directory(options.output_folder, error_code)) {
+    cerr << "输出路径不是文件夹: " << options.output_folder << endl;
     if (error_code) {
       cerr << error_code.message() << endl;
     }
